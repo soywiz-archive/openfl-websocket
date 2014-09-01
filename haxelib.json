@@ -1,0 +1,13 @@
+{
+  "name": "openfl-websocket",
+  "url": "https://github.com/soywiz/openfl-websocket",
+  "user": "soywiz",
+  "license": "MIT",
+  "tags": ["openfl", "websocket", "net", "c++", "neko", "android", "ios"],
+  "description": "Websocket implementation working with openfl",
+  "version": "0.0.1",
+  "releasenote": "",
+  "contributors": ["soywiz"],
+  "dependencies": {
+  }
+}
