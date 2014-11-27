@@ -110,7 +110,7 @@ class WebSocket
 					var b1 = socket.readByte();
 					
 					isFinal = ((b0 >> 7) & 1) != 0;
-					opcode = cast(((b0 >> 0) & 7), Opcode);
+					opcode = cast(((b0 >> 0) & 0xF), Opcode);
 					frameIsBinary = if (opcode == Opcode.Text) false; else if (opcode == Opcode.Binary) true; else frameIsBinary;
 					partialLength = ((b1 >> 0) & 0x7F);
 					isMasked = ((b1 >> 7) & 1) != 0;
