@@ -1,0 +1,5 @@
+-cp example/haxe
+-cp src
+-main ClientExample
+-lib openfl
+-neko client.n

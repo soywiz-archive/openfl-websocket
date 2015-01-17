@@ -5,8 +5,9 @@
   "license": "MIT",
   "tags": ["openfl", "websocket", "net", "cpp", "neko", "android", "ios"],
   "description": "Websocket client working with openfl",
-  "version": "0.0.1",
-  "releasenote": "",
+  "classPath": "src",
+  "version": "0.1.0",
+  "releasenote": "Highly improved quality",
   "contributors": ["soywiz"],
   "dependencies": {
   }

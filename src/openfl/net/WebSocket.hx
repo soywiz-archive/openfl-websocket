@@ -1,5 +1,6 @@
 package openfl.net;
-import haxe.Constraints.Function;
+import haxe.PosInfos;
+import flash.events.IOErrorEvent;
 import haxe.crypto.Base64;
 import haxe.io.Bytes;
 import haxe.Utf8;
@@ -11,8 +12,7 @@ import openfl.utils.ByteArray;
 import openfl.utils.Endian;
 
 @:allow(Slot)
-class WebSocket
-{
+class WebSocket {
 	private var socket:Socket;
 	private var origin = "http://127.0.0.1/";
 	private var scheme = "ws";
@@ -22,42 +22,59 @@ class WebSocket
 	private var path = "/";
 	private var secure = false;
 	private var state = State.Handshake;
-	public var slots = new Array<Slot>();
+	public var debug:Bool = true;
 
-	public function new(uri:String, origin:String = "http://127.0.0.1/", key:String = "wskey")  {
+	public function new(uri:String, origin:String = "http://127.0.0.1/", key:String = "wskey", debug:Bool = true)  {
 		this.origin = origin;
 		this.key = key;
+		this.debug = debug;
 		var reg = ~/^(\w+?):\/\/([\w\.]+)(:(\d+))?(\/.*)?$/;
 		//var reg = ~/^(\w+?):/;
 		if (!reg.match(uri)) throw(new Error('Uri not matching websocket uri "${uri}"'));
 		scheme = reg.matched(1);
-		host = reg.matched(2);
-		port = (reg.matched(4).length > 0) ? Std.parseInt(reg.matched(4)) : 80;
-		path = reg.matched(5);
-		
 		switch (scheme) {
 			case "ws": secure = false;
 			case "wss:": secure = true; throw(new Error('Not supporting secure websockets'));
 			default: throw(new Error('Scheme "${host}" is not a valid websocket scheme'));
 		}
-		
+		host = reg.matched(2);
+		port = (reg.matched(4) != null) ? Std.parseInt(reg.matched(4)) : 80;
+		path = reg.matched(5);
 		//trace('$scheme, $host, $port, $path');
 		
 		socket = new Socket();
 		socket.endian = Endian.BIG_ENDIAN;
+		socket.addEventListener(Event.CONNECT, function(e:Event) {
+			_debug('socket connected');
+			writeBytes(prepareClientHandshake(path, host, port, key, origin));
+			onSocketOpen.dispatch();
+		});
+		socket.addEventListener(Event.CLOSE, function(e:Event) {
+			_debug('socket closed');
+			onClose.dispatch();
+		});
+		socket.addEventListener(IOErrorEvent.IO_ERROR, function(e:IOErrorEvent) {
+			_debug('ioerror: ' + e.text);
+			onError.dispatch(e.text);
+		});
 		socket.addEventListener(ProgressEvent.SOCKET_DATA, function(e:ProgressEvent) {
 			handleData();
 		});
 		connect();
 	}
+
+	private function _debug(msg:String, ?p:PosInfos):Void {
+		if (!debug) return;
+		haxe.Log.trace(msg, p);
+	}
 	
 	private function connect() {
 		state = State.Handshake;
 		socket.connect(host, port);
-		writeBytes(prepareClientHandshake(path, host, port, key, origin));
 	}
 	
 	private function writeBytes(data:ByteArray) {
+		//if (socket == null || !socket.connected) return;
 		try {
 			socket.writeBytes(data);
 			socket.flush();
@@ -65,14 +82,15 @@ class WebSocket
 			trace(e);
 		}
 	}
-	
-	public function onTextPacket(handler: String -> Void) {
-		return new Slot(this, handler, false);
-	}
 
-	public function onBinaryPacket(handler: ByteArray -> Void) {
-		return new Slot(this, handler, true);
-	}
+	public var onTextPacket = new Signal<String>();
+	public var onBinaryPacket = new Signal<ByteArray>();
+	public var onPing = new Signal<Dynamic>();
+	public var onPong = new Signal<Dynamic>();
+	public var onSocketOpen = new Signal<Dynamic>();
+	public var onClose = new Signal<Dynamic>();
+	public var onError = new Signal<String>();
+	public var onOpen = new Signal<Dynamic>();
 	
 	private var isFinal:Bool;
 	private var isMasked:Bool;
@@ -103,6 +121,9 @@ class WebSocket
 						}
 					}
 					if (!found) return;
+					
+					onOpen.dispatch();
+					
 					state = State.Head;
 				case State.Head:
 					if (socket.bytesAvailable < 2) return;
@@ -139,18 +160,28 @@ class WebSocket
 
 					switch (opcode) {
 						case Opcode.Binary | Opcode.Text | Opcode.Continuation:
-							// do nothing
+							_debug("Received message, " + "Type: " + opcode);
+							if (isFinal) {
+								payload.position = 0;
+								if (frameIsBinary) {
+									onBinaryPacket.dispatch(payload);
+								} else {
+									onTextPacket.dispatch(payload.readUTFBytes(payload.length));
+								}
+								payload = null;
+							}
 						case Opcode.Ping:
+							_debug("Received Ping");
+							onPing.dispatch(null);
 							sendFrame(payload, Opcode.Pong);
 						case Opcode.Pong:
+							_debug("Received Pong");
+							onPong.dispatch(null);
 							lastPong = Date.now();
 						case Opcode.Close:
+							_debug("Socket Closed");
+							onClose.dispatch(null);
 							socket.close();
-					}
-					if (isFinal) {
-						payload.position = 0;
-						if (frameIsBinary) emit(payload, true); else emit(payload.readUTFBytes(payload.length), false);
-						payload = null;
 					}
 					state = State.Head;
 				default:
@@ -162,12 +193,6 @@ class WebSocket
 		//trace(socket.readUTFBytes(socket.bytesAvailable));
 	}
 	
-	private function emit(data:Dynamic, binary:Bool) {
-		for (slot in slots) {
-			if (slot.binary == binary) slot.handler(data);
-		}
-	}
-
 	private function ping() {
 		sendFrame(new ByteArray(), Opcode.Ping);
 	}
@@ -183,7 +208,7 @@ class WebSocket
 			'Connection: Upgrade',
 			"Sec-WebSocket-Key: " + Base64.encode(Bytes.ofString(key)),
 			'Origin: ${origin}',
-			'User-Agent:Mozilla/5.0',
+			'User-Agent:Mozilla/5.0'
 		];
 		
 		var ba = new ByteArray();
@@ -205,7 +230,6 @@ class WebSocket
 	}
 	
 	public function close() {
-		slots = [];
 		sendFrame(new ByteArray(), Opcode.Close);
 		socket.close();
 	}
@@ -237,21 +261,21 @@ class WebSocket
 	}
 }
 
-@:allow(openfl.net.WebSocket)
-class Slot {
-	private var socket:WebSocket;
-	private var handler:Dynamic -> Void;
-	private var binary:Bool;
-	
-	public function new(socket:WebSocket, handler:Dynamic -> Void, binary:Bool) {
-		this.socket = socket;
-		this.handler = handler;
-		this.binary = binary;
-		socket.slots.push(this);
+class Signal<T> {
+	private var callbacks = new Array<T -> Void>();
+	public function new() {
 	}
-	
-	public function dispose() {
-		socket.slots.remove(this);
+	public function dispatch(?value:T) {
+		for (cb in callbacks) {
+			cb(value);
+		}
+	}
+	public function add(callback: T -> Void): T -> Void {
+		callbacks.push(callback);
+		return callback;
+	}
+	public function remove(callback: T -> Void):Void {
+		callbacks.remove(callback);
 	}
 }
 

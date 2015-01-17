@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project>
+
+    <meta title="Websocket example" package="example" version="1.0.0" company="OpenFL Technologies" />
+    <app main="ClientExample" path="Export" file="websocket-example" />
+
+    <source path="haxe" />
+    <source path="../src" />
+
+    <haxelib name="openfl" />
+
+</project>
