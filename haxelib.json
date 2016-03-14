@@ -6,9 +6,10 @@
   "tags": ["openfl", "websocket", "net", "cpp", "neko", "android", "ios"],
   "description": "Websocket client working with openfl",
   "classPath": "src",
-  "version": "0.1.0",
-  "releasenote": "Highly improved quality",
+  "version": "0.2.0",
+  "releasenote": "Use haxe-ws library internally to avoid duplicate functionality",
   "contributors": ["soywiz"],
   "dependencies": {
+    "haxe-ws": "0.0.4"
   }
 }
